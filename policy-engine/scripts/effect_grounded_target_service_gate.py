@@ -26,14 +26,14 @@ def main() -> int:
         str(directory), pattern="test_effect_grounded_native_target_service.py",
     )
     result = unittest.TextTestRunner(verbosity=2).run(suite)
-    if result.testsRun != 9 or result.skipped or not result.wasSuccessful():
+    if result.testsRun != 11 or result.skipped or not result.wasSuccessful():
         print(
             f"TARGET_SERVICE_NATIVE_FAILED: run={result.testsRun} "
             f"skipped={len(result.skipped)}",
             file=sys.stderr,
         )
         return 1
-    print("TARGET_SERVICE_NATIVE_PASSED: 9 tests, 0 skipped")
+    print("TARGET_SERVICE_NATIVE_PASSED: 11 tests, 0 skipped")
     return 0
 
 
