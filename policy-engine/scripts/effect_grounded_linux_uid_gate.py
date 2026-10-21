@@ -38,6 +38,7 @@ def drop_identity(uid):
     os.setgroups([])
     os.setgid(uid)
     os.setuid(uid)
+    os.umask(0o077)
 
 
 def socket_json(sock, payload):
