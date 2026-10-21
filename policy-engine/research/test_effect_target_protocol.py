@@ -1,12 +1,14 @@
 """Standalone verifier tests: no ACS SDK, target service, or model API required."""
 from __future__ import annotations
 
+import base64
 import unittest
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from effect_target_protocol import (
-    action_sha256, appraise_observation, signed_observation,
+    MAX_SAFE_INTEGER, OBSERVATION_DOMAIN, action_sha256,
+    appraise_observation, canonical, signed_observation,
 )
 
 
@@ -71,6 +73,23 @@ class TargetObservationProtocolTests(unittest.TestCase):
     def test_unexpected_schema_field_is_undetermined(self):
         receipt = self.observe()
         receipt["payload"]["claim"] = "allow"
+        self.assertEqual(self.appraise(receipt), "undetermined")
+
+    def test_oversized_signed_timestamp_is_rejected_across_languages(self):
+        with self.assertRaises(ValueError):
+            signed_observation(
+                self.signer, action_id=self.action["action_id"],
+                nonce=self.nonce, state="committed",
+                action_digest=action_sha256(self.action),
+                observed_at=MAX_SAFE_INTEGER + 1,
+            )
+        receipt = self.observe()
+        receipt["payload"]["observed_at"] = MAX_SAFE_INTEGER + 1
+        receipt["signature"] = base64.b64encode(
+            self.signer.sign(
+                OBSERVATION_DOMAIN + canonical(receipt["payload"])
+            )
+        ).decode("ascii")
         self.assertEqual(self.appraise(receipt), "undetermined")
 
     def test_untrusted_or_missing_evidence_is_undetermined(self):
