@@ -379,9 +379,10 @@ class NativeSignedTargetTests(unittest.TestCase):
         """An otherwise correctly signed grant cannot be used before issuance."""
         action = self.action()
         token = self.issuer.sign(action)
-        now = int(self.target.clock())
-        token["payload"]["issued_at"] = now + 1
-        token["payload"]["expires_at"] = now + 61
+        frozen_now = int(self.target.clock())
+        self.target.clock = lambda: frozen_now
+        token["payload"]["issued_at"] = frozen_now + 120
+        token["payload"]["expires_at"] = frozen_now + 180
         token["signature"] = self.issuer.key.sign(DOMAIN + canonical(token["payload"]))
         with self.assertRaises(PermissionError):
             self.target.commit(action, token)
