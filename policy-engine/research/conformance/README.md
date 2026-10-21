@@ -46,7 +46,7 @@ ASCII("ACS-EFFECT-TARGET-OBSERVATION-v1") || 0x00 || canonical(payload)
 The signed payload has exactly seven keys `version` (integer 1),
 `kind` (`target_state_snapshot`), `nonce` (string), `action_id` (string),
 `state` (`committed` or `absent`), `action_sha256` (digest or JSON null
-for absent state) and `observed_at` (nonnegative integer seconds).
+for absent state) and `observed_at` (integer seconds in the exact range `0..2^53-1`).
 The signature is base64 encoded in the receipt envelope, and the verifier
 must use the externally authenticated public key.
 
