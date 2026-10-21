@@ -2,7 +2,9 @@
 from __future__ import annotations
 import asyncio
 import unittest
-from agent_control_specification import AgentControl, Decision, InterventionPoint
+from agent_control_specification import (
+    AgentControl, AgentControlBlocked, Decision, EnforcementMode, InterventionPoint,
+)
 try:
     from agent_control_specification import _native  # noqa: F401
 except ImportError:
@@ -83,3 +85,38 @@ class NativeEffectBoundaryTests(unittest.TestCase):
             snapshot("/allowed/report", subject="attacker")))
         self.assertEqual(result.verdict.decision, Decision.DENY)
         self.assertEqual(policy.seen[0]["subject"], "attacker")
+
+    def test_native_host_enforcement_blocks_callback_before_effect(self):
+        """The host, rather than the policy verdict alone, prevents the operation."""
+        policy = ScopedPolicy()
+        control = AgentControl.from_native(MANIFEST, None, policy)
+        applied = []
+
+        async def guarded(resource):
+            result = await control.evaluate_intervention_point(
+                InterventionPoint.PRE_TOOL_CALL, snapshot(resource), EnforcementMode.ENFORCE
+            )
+            await control.enforce(
+                InterventionPoint.PRE_TOOL_CALL, result, EnforcementMode.ENFORCE
+            )
+            applied.append(resource)
+
+        async def run():
+            await guarded('/allowed/report')
+            with self.assertRaises(AgentControlBlocked):
+                await guarded('/secret/report')
+
+        asyncio.run(run())
+        self.assertEqual(applied, ['/allowed/report'])
+
+    def test_untrusted_subject_can_be_spoofed_without_host_binding(self):
+        """Negative control: matching metadata alone never authenticates a caller."""
+        control = AgentControl.from_native(MANIFEST, None, ScopedPolicy())
+        maliciously_claimed_subject = 'agent-1'
+        result = asyncio.run(control.evaluate_intervention_point(
+            InterventionPoint.PRE_TOOL_CALL,
+            snapshot('/allowed/report', subject=maliciously_claimed_subject),
+        ))
+        self.assertEqual(result.verdict.decision, Decision.ALLOW)
+        # This is a deliberate identity-spoofing counterexample. The surrounding
+        # host must bind 'subject' to an independently authenticated identity.
