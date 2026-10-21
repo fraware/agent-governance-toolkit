@@ -1,0 +1,41 @@
+"""Mandatory native ACS / separate-process protected-target evidence gate."""
+from __future__ import annotations
+
+import importlib.machinery
+from pathlib import Path
+import sys
+import unittest
+
+
+def main() -> int:
+    try:
+        from agent_control_specification import _native
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: F401
+    except (ImportError, OSError) as exc:
+        print(f"TARGET_SERVICE_NATIVE_UNAVAILABLE: {exc}", file=sys.stderr)
+        return 3
+    native_path = getattr(_native, "__file__", "")
+    if not isinstance(native_path, str) or not any(
+        native_path.endswith(suffix) for suffix in importlib.machinery.EXTENSION_SUFFIXES
+    ):
+        print("TARGET_SERVICE_NATIVE_UNAVAILABLE: compiled ACS absent", file=sys.stderr)
+        return 3
+
+    directory = Path(__file__).resolve().parents[1] / "sdk" / "python" / "tests"
+    suite = unittest.defaultTestLoader.discover(
+        str(directory), pattern="test_effect_grounded_native_target_service.py",
+    )
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    if result.testsRun != 11 or result.skipped or not result.wasSuccessful():
+        print(
+            f"TARGET_SERVICE_NATIVE_FAILED: run={result.testsRun} "
+            f"skipped={len(result.skipped)}",
+            file=sys.stderr,
+        )
+        return 1
+    print("TARGET_SERVICE_NATIVE_PASSED: 11 tests, 0 skipped")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
