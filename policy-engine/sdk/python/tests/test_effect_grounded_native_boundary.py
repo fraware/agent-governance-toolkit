@@ -170,7 +170,7 @@ def _read_committed_records_from_other_process(db_path):
     script = (
         "import json, sqlite3, sys; "
         "db = sqlite3.connect('file:' + sys.argv[1] + '?mode=ro', uri=True); "
-        "print(json.dumps(db.execute('SELECT resource FROM effects ORDER BY id').fetchall()))"
+        "print(json.dumps(list(db.execute('SELECT resource FROM effects ORDER BY id'))))"
     )
     proc = subprocess.run(
         [sys.executable, "-c", script, str(db_path)],
