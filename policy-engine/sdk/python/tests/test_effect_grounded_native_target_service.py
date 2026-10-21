@@ -33,9 +33,7 @@ from test_effect_grounded_native_signed_target import Action, NATIVE
 from test_effect_grounded_native_dual_attestation import (
     TwoKeyTarget, decode, encode,
 )
-from test_effect_grounded_native_provisioned_identity import (
-    NativeProvisionedWorkloadTests,
-)
+import test_effect_grounded_native_provisioned_identity as provisioned_fixture
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "research"))
 from effect_target_protocol import (  # noqa: E402
@@ -110,7 +108,7 @@ class TargetServiceBoundaryTests(unittest.TestCase):
     def setUp(self):
         # Reuse the native signed-policy fixture, not a mocked policy verdict.
         # Its keys and target are *test harness* material, not independent custody.
-        self.native = NativeProvisionedWorkloadTests(
+        self.native = provisioned_fixture.NativeProvisionedWorkloadTests(
             methodName="test_three_valid_signatures_commit_one_effect",
         )
         self.native.setUp()
