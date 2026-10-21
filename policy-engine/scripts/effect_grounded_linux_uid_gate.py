@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import pwd
 import select
+import shutil
 import socket
 import subprocess
 import sys
@@ -111,7 +112,38 @@ def main():
     fixture.setUp()
     target = None
     local_sock = None
+    staging_dir = None
     try:
+        # The runner checkout is inaccessible to synthetic UIDs. Copy only
+        # non-secret fixture source to a world-readable but root-owned staging
+        # tree. The target database and all private keys stay outside it.
+        staging_dir = tempfile.mkdtemp(prefix="acs-test-source-")
+        os.chmod(staging_dir, 0o755)
+        stage_engine = Path(staging_dir) / "policy-engine"
+        stage_tests = stage_engine / "sdk" / "python" / "tests"
+        stage_research = stage_engine / "research"
+        stage_scripts = stage_engine / "scripts"
+        for directory in (stage_tests, stage_research, stage_scripts):
+            directory.mkdir(parents=True, exist_ok=True, mode=0o755)
+        sources = [
+            (TEST_DIR / name, stage_tests / name)
+            for name in (
+                "test_effect_grounded_native_signed_target.py",
+                "test_effect_grounded_native_dual_attestation.py",
+                "test_effect_grounded_native_provisioned_identity.py",
+                "test_effect_grounded_native_target_service.py",
+            )
+        ]
+        sources.extend([
+            (RESEARCH_DIR / "effect_target_protocol.py",
+             stage_research / "effect_target_protocol.py"),
+            (Path(__file__).resolve(),
+             stage_scripts / "effect_grounded_linux_uid_gate.py"),
+        ])
+        for source, destination in sources:
+            shutil.copyfile(source, destination)
+            destination.chmod(0o644)
+
         with tempfile.TemporaryDirectory(prefix="acs-target-uid-") as root_dir:
             # The host UID lacks search permission on the directory and cannot
             # access the SQLite database through the filesystem.
@@ -125,7 +157,7 @@ def main():
                 ))
 
             local_sock, remote_sock = socket.socketpair(socket.AF_UNIX)
-            target_script = str(TEST_DIR / "test_effect_grounded_native_target_service.py")
+            target_script = str(stage_tests / "test_effect_grounded_native_target_service.py")
             try:
                 target = subprocess.Popen(
                     [
@@ -135,7 +167,7 @@ def main():
                         encode_key(fixture.identity.public),
                     ],
                     stdin=remote_sock.fileno(), stdout=remote_sock.fileno(),
-                    stderr=subprocess.PIPE, close_fds=True,
+                    stderr=subprocess.PIPE, close_fds=True, cwd=staging_dir,
                     preexec_fn=lambda: drop_identity(TARGET_UID),
                 )
             finally:
@@ -181,12 +213,14 @@ def main():
             def from_host(request):
                 child = subprocess.Popen(
                     [
-                        sys.executable, str(Path(__file__).resolve()), "--host-client",
-                        str(local_sock.fileno()), db_path, str(target.pid),
+                        sys.executable,
+                        str(stage_scripts / "effect_grounded_linux_uid_gate.py"),
+                        "--host-client", str(local_sock.fileno()),
+                        db_path, str(target.pid),
                     ],
                     stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE, text=True, close_fds=True,
-                    pass_fds=(local_sock.fileno(),),
+                    pass_fds=(local_sock.fileno(),), cwd=staging_dir,
                     preexec_fn=lambda: drop_identity(HOST_UID),
                 )
                 stdout, stderr = child.communicate(
@@ -259,6 +293,8 @@ def main():
             if target.stderr is not None:
                 target.stderr.close()
         fixture.doCleanups()
+        if staging_dir is not None:
+            shutil.rmtree(staging_dir)
 
 
 if __name__ == "__main__":
