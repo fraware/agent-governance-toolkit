@@ -31,7 +31,7 @@ except ImportError as exc:
 from agent_control_specification import AgentControl, Decision, EnforcementMode, InterventionPoint, action_identity
 from test_effect_grounded_native_signed_target import (
     Action, CustomPolicy, DOMAIN as ISSUER_DOMAIN, FIELDS as ISSUER_FIELDS,
-    MANIFEST, NATIVE, TestIssuer, TIME, canonical,
+    MANIFEST, NATIVE, TestIssuer, canonical,
 )
 
 DECISION_DOMAIN = b"NATIVE-ACS-POLICY-DECISION-RESEARCH-v1\0"
@@ -118,7 +118,9 @@ class TwoKeyTarget:
     """One IMMEDIATE transaction checks both signatures and inserts effect."""
 
     def __init__(self, path, issuer_key, decision_key, policy_hash=POLICY_HASH,
-                 identity_key=None):
+                 identity_key=None, clock=None):
+        # Clock injection makes commit-boundary validity independently testable.
+        self.clock = clock if clock is not None else time.time
         self.path = Path(path)
         self.issuer_key = issuer_key
         self.decision_key = decision_key
@@ -171,7 +173,7 @@ class TwoKeyTarget:
                     )
                 except (InvalidSignature, ValueError, TypeError) as exc:
                     raise PermissionError("invalid decision signature") from exc
-                now = int(time.time())
+                now = int(self.clock())
                 if (body["decision"] != "allow"
                         or body["audience"] != AUDIENCE
                         or body["policy_sha256"] != self.policy_hash
@@ -237,7 +239,7 @@ class TwoKeyTarget:
                         or g["value_hash"] != sha256(action.value.encode("utf-8")).hexdigest()
                         or g["audience"] != "research-ledger"
                         or type(g["epoch"]) is not int or g["epoch"] != epoch
-                        or type(g["expires_at"]) is not int or TIME >= g["expires_at"]):
+                        or type(g["expires_at"]) is not int or now >= g["expires_at"]):
                     raise PermissionError("issuer context mismatch")
                 try:
                     self.issuer_key.verify(

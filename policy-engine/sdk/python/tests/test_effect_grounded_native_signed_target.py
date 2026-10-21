@@ -16,6 +16,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 from agent_control_specification import (
@@ -35,7 +36,6 @@ if CRYPTO:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 DOMAIN = b"ACS-TARGET-RESEARCH-SIGNED-ACTION-v1\0"
-TIME = 1790000000
 FIELDS = frozenset({
     "action_id", "subject", "tenant", "resource", "operation", "value_hash",
     "authorization_id", "epoch", "audience", "expires_at",
@@ -93,7 +93,9 @@ class Action:
 class TestIssuer:
     """Independent authorization gate with an exact research resource prefix."""
 
-    def __init__(self):
+    def __init__(self, clock=None):
+        # Tests may inject a deterministic clock; production time trust is out of scope.
+        self.clock = clock if clock is not None else time.time
         self.key = Ed25519PrivateKey.generate()
         self.public = self.key.public_key()
 
@@ -109,7 +111,7 @@ class TestIssuer:
             "value_hash": sha256(action.value.encode("utf-8")).hexdigest(),
             "authorization_id": authorization_id or "grant-" + action.action_id,
             "epoch": 1, "audience": "research-ledger",
-            "expires_at": TIME + 60,
+            "expires_at": int(self.clock()) + 60,
         }
         return {"payload": payload, "signature": self.key.sign(DOMAIN + canonical(payload))}
 
@@ -117,7 +119,8 @@ class TestIssuer:
 class ProtectedLedger:
     """Commit-time verifier and durable effect ledger, no unverified write API."""
 
-    def __init__(self, path, pinned_public_key):
+    def __init__(self, path, pinned_public_key, clock=None):
+        self.clock = clock if clock is not None else time.time
         self.path = Path(path)
         self.pinned_public_key = pinned_public_key
         with sqlite3.connect(self.path) as db:
@@ -167,7 +170,7 @@ class ProtectedLedger:
                         or type(p["epoch"]) is not int
                         or p["epoch"] != db.execute("SELECT epoch FROM state").fetchone()[0]
                         or type(p["expires_at"]) is not int
-                        or TIME >= p["expires_at"]):
+                        or int(self.clock()) >= p["expires_at"]):
                     raise PermissionError("incorrect audience, epoch, or expiry")
                 if db.execute(
                     "SELECT 1 FROM revocations WHERE token_id=?",
@@ -359,7 +362,7 @@ class NativeSignedTargetTests(unittest.TestCase):
     def test_expired_token_fails_closed(self):
         a = self.action()
         token = self.issuer.sign(a)
-        token["payload"]["expires_at"] = TIME
+        token["payload"]["expires_at"] = int(self.target.clock())
         # Re-sign the expired payload so expiry is the sole rejection reason.
         token["signature"] = self.issuer.key.sign(DOMAIN + canonical(token["payload"]))
         with self.assertRaises(PermissionError):
