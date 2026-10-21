@@ -10,6 +10,7 @@ on:
       - 'policy-engine/sdk/python/tests/test_effect_grounded_native_dual_attestation.py'
       - 'policy-engine/sdk/python/tests/test_effect_grounded_native_provisioned_identity.py'
       - 'policy-engine/scripts/effect_grounded_target_service_gate.py'
+      - 'policy-engine/scripts/effect_grounded_linux_uid_gate.py'
       - '.github/workflows/effect-grounded-target-service.yml'
   workflow_dispatch:
 
@@ -46,3 +47,5 @@ jobs:
         run: python -m unittest discover -s research -p 'test_effect_target_protocol.py' -v
       - name: Mandatory process-boundary effect evidence conformance
         run: python scripts/effect_grounded_target_service_gate.py
+      - name: Distinct Linux UID protected-target conformance
+        run: sudo -n "$(command -v python)" scripts/effect_grounded_linux_uid_gate.py
