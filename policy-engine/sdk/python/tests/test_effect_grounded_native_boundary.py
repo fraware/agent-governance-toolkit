@@ -152,7 +152,7 @@ class PrePostPolicy:
     def evaluate(self, invocation):
         target = invocation["input"]["policy_target"]["value"]
         self.observed_targets.append(target)
-        if "post_block" in target:
+        if "reported" in target:
             return {
                 "decision": "deny" if target["post_block"] else "allow",
                 "reason": "post_result_rejected" if target["post_block"] else "post_ok",
