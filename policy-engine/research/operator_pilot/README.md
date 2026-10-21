@@ -48,9 +48,14 @@ with a table named `effects`. Its `action_id` is a primary key and its
 `action_bytes` is the canonical JSON-encoded v1 action. The existing native
 research `TwoKeyTarget` uses precisely this schema. The pilot observer
 checks canonical stored bytes, refuses malformed data and reads state without
-creating or modifying the target database. The containing directory must be
+creating or modifying the target database. Duplicate matching records are
+bounded to two rows and rejected, and the read-only SQLite connection is
+explicitly closed. The containing directory must be
 owned by B with mode `0700`; the database file must be B-owned and mode
-`0600`. Validate these permissions and separately document how the target
+`0600`. A passing file-mode test alone does not demonstrate a denial across
+different UIDs; the separate Linux UID CI test covers the stated OS-principal
+access restrictions for its own test environment. Validate these permissions
+and separately document how the target
 enforces *all* writable paths.
 
 ## Requester challenge and target response
