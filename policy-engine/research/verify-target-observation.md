@@ -19,7 +19,7 @@ The verifier receives four independently supplied artifacts and expectations.
   bootstrap message. `EXPECTED_NONCE` is the verifier's request challenge,
   independently remembered from the observation request.
 
-From `policy-engine/`, after installing `cryptography` in the environment:
+From `policy-engine/`, after installing `cryptography` in the environment, run:
 
 ```bash
 python research/verify_target_observation.py \
