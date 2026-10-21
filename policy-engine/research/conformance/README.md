@@ -80,6 +80,20 @@ python -m unittest discover -s research -p 'test_effect_target_protocol.py' -v
 python -m unittest discover -s research -p 'test_verify_target_observation.py' -v
 ```
 
+An independent Node.js reference consumer uses **only built-in Node cryptography**,
+without importing the Python implementation or ACS SDK. Run it from
+`policy-engine/` with Node.js 22.
+
+```bash
+node --test research/conformance/verify_target_vectors.test.mjs
+```
+
+This second-language check reproduces canonical bytes, SHA-256 action hashes,
+the fixed Ed25519 receipt signatures, all seven verdicts, and fail-closed
+malformed-claim handling. The two implementations remain developed and tested
+in the same repository and administrative environment; this is evidence of
+cross-language consistency, not independent operational governance.
+
 A new adapter may load the machine-readable vector file, verify signatures
 against `public_key_hex`, recompute `canonical_action_sha256` from the
 `canonical_action_hex` bytes, and check all expected judgments independently
