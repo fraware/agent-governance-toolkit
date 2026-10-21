@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'policy-engine/research/effect_target_protocol.py'
+      - 'policy-engine/research/conformance/**'
+      - 'policy-engine/research/test_effect_target_vectors.py'
       - 'policy-engine/research/test_effect_target_protocol.py'
       - 'policy-engine/research/verify_target_observation.py'
       - 'policy-engine/research/verify-target-observation.md'
@@ -43,6 +45,8 @@ jobs:
         run: python -m unittest discover -s research -p 'test_effect_target_protocol.py' -v
       - name: External-key-pin offline verifier tests
         run: python -m unittest discover -s research -p 'test_verify_target_observation.py' -v
+      - name: Frozen signed receipt conformance vectors
+        run: python -m unittest discover -s research -p 'test_effect_target_vectors.py' -v
 
   signed-target-observation:
     name: Native ACS / process target with signed snapshot oracle
