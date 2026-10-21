@@ -30,13 +30,13 @@ def main() -> int:
         pattern="test_effect_grounded_native_boundary.py",
     )
     result = unittest.TextTestRunner(verbosity=2).run(suite)
-    if result.testsRun != 4 or result.skipped or not result.wasSuccessful():
+    if result.testsRun != 8 or result.skipped or not result.wasSuccessful():
         print(
             f"NATIVE_ACS_CONFORMANCE_FAILED: run={result.testsRun} skipped={len(result.skipped)}",
             file=sys.stderr,
         )
         return 1
-    print("NATIVE_ACS_CONFORMANCE_PASSED: 4 tests, 0 skipped")
+    print("NATIVE_ACS_CONFORMANCE_PASSED: 8 tests, 0 skipped")
     return 0
 
 
