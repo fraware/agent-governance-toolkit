@@ -126,7 +126,7 @@ class TargetOperatorPilotTests(unittest.TestCase):
         self.assertEqual(self.verdict(self.observe(), nonce="f" * 32),
                          "undetermined")
 
-    def test_restrict_database_from_nonowner_readers(self):
+    def test_rejects_database_exposed_by_world_readable_mode(self):
         self.commit_fixture()
         self.db_file.chmod(0o644)
         with self.assertRaises(PilotInputError):
@@ -154,6 +154,25 @@ class TargetOperatorPilotTests(unittest.TestCase):
         with sqlite3.connect(self.db_file) as db:
             db.execute("INSERT INTO effects VALUES (?,?)",
                        (self.action["action_id"], blob))
+        self.db_file.chmod(0o600)
+        with self.assertRaises(PilotInputError):
+            self.observe()
+
+    def test_duplicate_rows_in_nonunique_target_table_are_rejected(self):
+        # Even if target-schema integrity is compromised, the observation
+        # signer refuses to pick an arbitrary duplicate action ID.
+        with sqlite3.connect(self.db_file) as db:
+            db.execute("DROP TABLE effects")
+            db.execute(
+                "CREATE TABLE effects(action_id TEXT, action_bytes BLOB NOT NULL)"
+            )
+            db.executemany(
+                "INSERT INTO effects VALUES(?, ?)",
+                [
+                    (self.action["action_id"], canonical(self.action)),
+                    (self.action["action_id"], canonical(self.action)),
+                ],
+            )
         self.db_file.chmod(0o600)
         with self.assertRaises(PilotInputError):
             self.observe()
