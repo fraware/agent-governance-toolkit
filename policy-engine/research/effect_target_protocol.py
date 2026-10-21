@@ -8,6 +8,7 @@ completeness across other execution paths, or permanent absence of effects.
 from __future__ import annotations
 
 import base64
+import binascii
 from hashlib import sha256
 import json
 import time
@@ -47,6 +48,10 @@ def signed_observation(private_key, *, action_id, nonce, state,
             raise ValueError("committed observation requires action digest")
     elif action_digest is not None:
         raise ValueError("absent snapshot must not claim an action digest")
+    if type(observed_at) is not int and observed_at is not None:
+        raise ValueError("observed_at must be integer seconds")
+    if observed_at is not None and observed_at < 0:
+        raise ValueError("negative observation time")
     payload = {
         "version": 1, "kind": "target_state_snapshot",
         "nonce": nonce, "action_id": action_id, "state": state,
@@ -79,7 +84,9 @@ def appraise_observation(receipt, pinned_public_key, *, action, nonce):
                 or type(action.get("action_id")) is not str
                 or type(nonce) is not str or not nonce):
             return "undetermined"
-        if (payload["version"] != 1
+        if (type(payload["version"]) is not int
+                or payload["version"] != 1
+                or type(payload["kind"]) is not str
                 or payload["kind"] != "target_state_snapshot"
                 or type(payload["nonce"]) is not str
                 or payload["nonce"] != nonce
@@ -87,6 +94,7 @@ def appraise_observation(receipt, pinned_public_key, *, action, nonce):
                 or payload["action_id"] != action["action_id"]
                 or type(payload["observed_at"]) is not int
                 or payload["observed_at"] < 0
+                or type(payload["state"]) is not str
                 or payload["state"] not in ("committed", "absent")):
             return "undetermined"
         state = payload["state"]
@@ -105,5 +113,6 @@ def appraise_observation(receipt, pinned_public_key, *, action, nonce):
         return (
             "established" if digest == action_sha256(action) else "refuted"
         )
-    except (InvalidSignature, ValueError, TypeError, KeyError, OverflowError):
+    except (InvalidSignature, ValueError, TypeError, KeyError, OverflowError,
+            AttributeError, binascii.Error):
         return "undetermined"
