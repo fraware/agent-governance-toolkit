@@ -41,7 +41,8 @@ def load_limited_json(path: Path):
     """Read a small JSON artifact; reject oversized/malformed inputs."""
     if path.stat().st_size > MAX_INPUT_BYTES:
         raise ValueError("JSON artifact exceeds size limit")
-    data = path.read_bytes()
+    with path.open("rb") as source:
+        data = source.read(MAX_INPUT_BYTES + 1)
     if len(data) > MAX_INPUT_BYTES:
         raise ValueError("JSON artifact exceeds size limit")
     return json.loads(
@@ -80,7 +81,8 @@ def offline_appraise(*, action_path: Path, receipt_path: Path,
         # The key file contains exactly 32 RAW public-key bytes (RFC 8032).
         # It must be distributed and authenticated outside the untrusted
         # receipt channel. No trust is inferred from filesystem co-location.
-        key_bytes = public_key_path.read_bytes()
+        with public_key_path.open("rb") as source:
+            key_bytes = source.read(33)
         if len(key_bytes) != 32:
             result["reason"] = "invalid_target_public_key"
             return result
