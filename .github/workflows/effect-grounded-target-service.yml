@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'policy-engine/research/effect_target_protocol.py'
+      - 'policy-engine/research/test_effect_target_protocol.py'
       - 'policy-engine/sdk/python/tests/test_effect_grounded_native_target_service.py'
       - 'policy-engine/sdk/python/tests/test_effect_grounded_native_signed_target.py'
       - 'policy-engine/sdk/python/tests/test_effect_grounded_native_dual_attestation.py'
@@ -41,5 +42,7 @@ jobs:
           python -m pip install maturin==1.8.7
           python -m pip install --no-build-isolation ./sdk/python
           python -m pip install cryptography==46.0.7
+      - name: Standalone signed target-snapshot protocol tests
+        run: python -m unittest discover -s research -p 'test_effect_target_protocol.py' -v
       - name: Mandatory process-boundary effect evidence conformance
         run: python scripts/effect_grounded_target_service_gate.py
