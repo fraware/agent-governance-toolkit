@@ -62,7 +62,7 @@ python -m unittest discover -s research -p 'test_verify_target_observation.py' -
 The first suite verifies the signature/nonce/effect appraisal protocol. The
 second generates temporary test keys, receipt and action artifacts and
 exercises the offline CLI, mismatched trust anchors, tampered receipts,
-malformed input, oversized input, failed nonce checks and expectation-driven
+malformed input, oversized input, duplicate JSON object keys in either input, failed nonce checks and expectation-driven
 exit behavior. The mandatory native ACS workflow runs these independent suites
 and subsequently tests actual signed commits under the process and Linux UID
 research models.
