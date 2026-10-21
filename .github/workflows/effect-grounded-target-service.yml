@@ -27,6 +27,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  independent-node-vector-verification:
+    name: Independent Node.js receipt verifier (built-in crypto only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: policy-engine
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+      - name: Cross-language fixed signed vector conformance
+        run: node --test research/conformance/verify_target_vectors.test.mjs
+
   offline-evidence-verification:
     name: Offline signed evidence verifier (no ACS SDK)
     runs-on: ubuntu-latest
