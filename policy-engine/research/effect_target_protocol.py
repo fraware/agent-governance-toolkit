@@ -16,6 +16,7 @@ import time
 from cryptography.exceptions import InvalidSignature
 
 OBSERVATION_DOMAIN = b"ACS-EFFECT-TARGET-OBSERVATION-v1\0"
+MAX_SAFE_INTEGER = (1 << 53) - 1
 ACTION_FIELDS = frozenset({
     "action_id", "subject", "tenant", "resource", "operation", "value",
 })
@@ -70,8 +71,8 @@ def signed_observation(private_key, *, action_id, nonce, state,
         raise ValueError("absent snapshot must not claim an action digest")
     if type(observed_at) is not int and observed_at is not None:
         raise ValueError("observed_at must be integer seconds")
-    if observed_at is not None and observed_at < 0:
-        raise ValueError("negative observation time")
+    if observed_at is not None and not 0 <= observed_at <= MAX_SAFE_INTEGER:
+        raise ValueError("observation timestamp out of cross-language range")
     payload = {
         "version": 1, "kind": "target_state_snapshot",
         "nonce": nonce, "action_id": action_id, "state": state,
@@ -112,7 +113,7 @@ def appraise_observation(receipt, pinned_public_key, *, action, nonce):
                 or type(payload["action_id"]) is not str
                 or payload["action_id"] != action["action_id"]
                 or type(payload["observed_at"]) is not int
-                or payload["observed_at"] < 0
+                or not 0 <= payload["observed_at"] <= MAX_SAFE_INTEGER
                 or type(payload["state"]) is not str
                 or payload["state"] not in ("committed", "absent")):
             return "undetermined"
