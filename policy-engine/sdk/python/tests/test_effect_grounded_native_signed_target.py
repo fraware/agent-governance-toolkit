@@ -360,6 +360,8 @@ class NativeSignedTargetTests(unittest.TestCase):
         a = self.action()
         token = self.issuer.sign(a)
         token["payload"]["expires_at"] = TIME
+        # Re-sign the expired payload so expiry is the sole rejection reason.
+        token["signature"] = self.issuer.key.sign(DOMAIN + canonical(token["payload"]))
         with self.assertRaises(PermissionError):
             self.target.commit(a, token)
         self.assertEqual(self.effects(), [])
@@ -376,6 +378,41 @@ class NativeSignedTargetTests(unittest.TestCase):
             check=True, capture_output=True, text=True,
         )
         self.assertEqual(json.loads(seen.stdout), [["a1"]])
+
+
+    def test_wrong_audience_rejected_with_valid_signature(self):
+        action = self.action()
+        token = self.issuer.sign(action)
+        token["payload"]["audience"] = "unrelated-service"
+        token["signature"] = self.issuer.key.sign(DOMAIN + canonical(token["payload"]))
+        with self.assertRaises(PermissionError):
+            self.target.commit(action, token)
+        self.assertEqual(self.effects(), [])
+
+    def test_conflicting_action_id_rejected_after_commit(self):
+        original = self.action("collision", value="first-value")
+        altered = self.action("collision", value="second-value")
+        self.target.commit(original, self.issuer.sign(original))
+        with self.assertRaises(PermissionError):
+            self.target.commit(altered, self.issuer.sign(altered))
+        self.assertEqual(self.effects(), [("collision", "first-value")])
+
+    def test_revocation_after_commit_preserves_effect_and_rejects_replay(self):
+        action = self.action()
+        token = self.issuer.sign(action)
+        self.target.commit(action, token)
+        self.target.revoke(token["payload"]["authorization_id"])
+        with self.assertRaises(PermissionError):
+            self.target.commit(action, token)
+        self.assertEqual(self.effects(), [("a1", "v1")])
+
+    def test_textual_resource_scope_is_not_filesystem_path_safety(self):
+        # Both policies use literal string prefixes. This counterexample is
+        # intentionally ACCEPTED by the model, while a file service might
+        # resolve its components differently; no path-safety claim follows.
+        alias = self.action("path-alias", resource="/granted/../secret")
+        self.invoke(alias)
+        self.assertEqual(self.effects(), [("path-alias", "v1")])
 
 
 if __name__ == "__main__":
