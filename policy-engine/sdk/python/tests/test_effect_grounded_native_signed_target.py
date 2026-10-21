@@ -38,7 +38,7 @@ if CRYPTO:
 DOMAIN = b"ACS-TARGET-RESEARCH-SIGNED-ACTION-v1\0"
 FIELDS = frozenset({
     "action_id", "subject", "tenant", "resource", "operation", "value_hash",
-    "authorization_id", "epoch", "audience", "expires_at",
+    "authorization_id", "epoch", "audience", "issued_at", "expires_at",
 })
 MANIFEST = """agent_control_specification_version: 0.4.0-alpha.1
 metadata:
@@ -104,6 +104,7 @@ class TestIssuer:
                 or action.operation != "write"
                 or not action.resource.startswith("/granted/")):
             raise PermissionError("issuer rule rejects action")
+        issued_at = int(self.clock())
         payload = {
             "action_id": action.action_id,
             "subject": action.subject, "tenant": action.tenant,
@@ -111,7 +112,8 @@ class TestIssuer:
             "value_hash": sha256(action.value.encode("utf-8")).hexdigest(),
             "authorization_id": authorization_id or "grant-" + action.action_id,
             "epoch": 1, "audience": "research-ledger",
-            "expires_at": int(self.clock()) + 60,
+            "issued_at": issued_at,
+            "expires_at": issued_at + 60,
         }
         return {"payload": payload, "signature": self.key.sign(DOMAIN + canonical(payload))}
 
@@ -166,11 +168,14 @@ class ProtectedLedger:
                         or p["action_id"] != action.action_id
                         or p["value_hash"] != sha256(action.value.encode("utf-8")).hexdigest()):
                     raise PermissionError("action differs from signed authorization")
+                now = int(self.clock())
                 if (p["audience"] != "research-ledger"
                         or type(p["epoch"]) is not int
                         or p["epoch"] != db.execute("SELECT epoch FROM state").fetchone()[0]
+                        or type(p["issued_at"]) is not int
                         or type(p["expires_at"]) is not int
-                        or int(self.clock()) >= p["expires_at"]):
+                        or not p["issued_at"] <= now < p["expires_at"]
+                        or p["expires_at"] - p["issued_at"] > 60):
                     raise PermissionError("incorrect audience, epoch, or expiry")
                 if db.execute(
                     "SELECT 1 FROM revocations WHERE token_id=?",
@@ -367,6 +372,30 @@ class NativeSignedTargetTests(unittest.TestCase):
         token["signature"] = self.issuer.key.sign(DOMAIN + canonical(token["payload"]))
         with self.assertRaises(PermissionError):
             self.target.commit(a, token)
+        self.assertEqual(self.effects(), [])
+
+
+    def test_future_issued_grant_rejected_with_valid_signature(self):
+        """An otherwise correctly signed grant cannot be used before issuance."""
+        action = self.action()
+        token = self.issuer.sign(action)
+        frozen_now = int(self.target.clock())
+        self.target.clock = lambda: frozen_now
+        token["payload"]["issued_at"] = frozen_now + 120
+        token["payload"]["expires_at"] = frozen_now + 180
+        token["signature"] = self.issuer.key.sign(DOMAIN + canonical(token["payload"]))
+        with self.assertRaises(PermissionError):
+            self.target.commit(action, token)
+        self.assertEqual(self.effects(), [])
+
+    def test_overlong_grant_rejected_with_valid_signature(self):
+        """A valid issuer key does not override the bounded validity contract."""
+        action = self.action()
+        token = self.issuer.sign(action)
+        token["payload"]["expires_at"] = token["payload"]["issued_at"] + 61
+        token["signature"] = self.issuer.key.sign(DOMAIN + canonical(token["payload"]))
+        with self.assertRaises(PermissionError):
+            self.target.commit(action, token)
         self.assertEqual(self.effects(), [])
 
     def test_separate_read_only_process_observes_commit(self):

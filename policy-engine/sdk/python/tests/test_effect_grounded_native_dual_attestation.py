@@ -10,6 +10,7 @@ import asyncio
 import base64
 from dataclasses import replace
 from hashlib import sha256
+import inspect
 import json
 from pathlib import Path
 import sqlite3
@@ -41,7 +42,24 @@ IDENTITY_FIELDS = frozenset({
     "epoch", "issued_at", "expires_at",
 })
 AUDIENCE = "research-dual-target"
-POLICY_HASH = sha256(MANIFEST.encode("utf-8")).hexdigest()
+POLICY_SOURCE_DOMAIN = b"ACS-RESEARCH-POLICY-SOURCE-v1\0"
+
+
+def fixture_policy_commitment(manifest: str, adapter_source: str) -> str:
+    """Commit to the exact manifest and source text of the test's policy adapter.
+
+    This binds neither transitive dependencies nor independently provisioned code.
+    The signer and target share the same source in this single-runner experiment.
+    """
+    if not isinstance(manifest, str) or not isinstance(adapter_source, str):
+        raise TypeError("policy commitment inputs must be source strings")
+    return sha256(
+        POLICY_SOURCE_DOMAIN
+        + canonical({"manifest": manifest, "adapter_source": adapter_source})
+    ).hexdigest()
+
+
+POLICY_HASH = fixture_policy_commitment(MANIFEST, inspect.getsource(CustomPolicy))
 DECISION_KEYS = frozenset({
     "action", "policy_input", "input_identity", "enforced_identity",
     "evaluation_id", "issued_at", "expires_at", "epoch",
@@ -239,7 +257,10 @@ class TwoKeyTarget:
                         or g["value_hash"] != sha256(action.value.encode("utf-8")).hexdigest()
                         or g["audience"] != "research-ledger"
                         or type(g["epoch"]) is not int or g["epoch"] != epoch
-                        or type(g["expires_at"]) is not int or now >= g["expires_at"]):
+                        or type(g["issued_at"]) is not int
+                        or type(g["expires_at"]) is not int
+                        or not g["issued_at"] <= now < g["expires_at"]
+                        or g["expires_at"] - g["issued_at"] > 60):
                     raise PermissionError("issuer context mismatch")
                 try:
                     self.issuer_key.verify(
@@ -437,6 +458,53 @@ class NativeDualAttestationTests(unittest.TestCase):
 
     def test_policy_revision_mismatch_rejects_real_signature(self):
         self.target.policy_hash = "0" * 64
+        with self.assertRaises(PermissionError):
+            self.commit()
+        self.assertEqual(self.effects(), [])
+
+
+
+    def test_future_issuer_grant_rejected_at_dual_target(self):
+        """A valid issuer signature is insufficient before the signed start."""
+        frozen_now = int(self.target.clock())
+        self.target.clock = lambda: frozen_now
+        grant = self.issuer.sign(self.action)
+        grant["payload"]["issued_at"] = frozen_now + 120
+        grant["payload"]["expires_at"] = frozen_now + 180
+        grant["signature"] = self.issuer.key.sign(
+            ISSUER_DOMAIN + canonical(grant["payload"])
+        )
+        with self.assertRaises(PermissionError):
+            self.commit(grant=grant)
+        self.assertEqual(self.effects(), [])
+
+    def test_overlong_signed_issuer_grant_rejected_at_dual_target(self):
+        """The dual-signature target independently enforces the issuer TTL."""
+        frozen_now = int(self.target.clock())
+        self.target.clock = lambda: frozen_now
+        grant = self.issuer.sign(self.action)
+        grant["payload"]["expires_at"] = grant["payload"]["issued_at"] + 61
+        grant["signature"] = self.issuer.key.sign(
+            ISSUER_DOMAIN + canonical(grant["payload"])
+        )
+        with self.assertRaises(PermissionError):
+            self.commit(grant=grant)
+        self.assertEqual(self.effects(), [])
+
+    def test_policy_adapter_source_changes_commitment(self):
+        """A stable manifest does not hide changed custom policy source text."""
+        source = inspect.getsource(CustomPolicy)
+        changed = source.replace('startswith("/granted")', 'startswith("/other")')
+        self.assertNotEqual(changed, source)
+        self.assertEqual(POLICY_HASH, fixture_policy_commitment(MANIFEST, source))
+        self.assertNotEqual(POLICY_HASH, fixture_policy_commitment(MANIFEST, changed))
+
+    def test_changed_policy_source_pin_rejects_valid_decision_signature(self):
+        """A mismatched target pin rejects the signer even with a valid key."""
+        source = inspect.getsource(CustomPolicy)
+        changed = source.replace('startswith("/granted")', 'startswith("/other")')
+        self.assertNotEqual(changed, source)
+        self.target.policy_hash = fixture_policy_commitment(MANIFEST, changed)
         with self.assertRaises(PermissionError):
             self.commit()
         self.assertEqual(self.effects(), [])

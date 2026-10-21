@@ -26,14 +26,14 @@ def main() -> int:
         str(test_dir), pattern="test_effect_grounded_native_signed_target.py",
     )
     result = unittest.TextTestRunner(verbosity=2).run(suite)
-    if result.testsRun != 18 or result.skipped or not result.wasSuccessful():
+    if result.testsRun != 20 or result.skipped or not result.wasSuccessful():
         print(
             f"SIGNED_TARGET_NATIVE_FAILED: run={result.testsRun} "
             f"skipped={len(result.skipped)}",
             file=sys.stderr,
         )
         return 1
-    print("SIGNED_TARGET_NATIVE_PASSED: 18 tests, 0 skipped")
+    print("SIGNED_TARGET_NATIVE_PASSED: 20 tests, 0 skipped")
     return 0
 
 
