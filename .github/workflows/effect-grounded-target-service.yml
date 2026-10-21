@@ -25,6 +25,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  offline-evidence-verification:
+    name: Offline signed evidence verifier (no ACS SDK)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: policy-engine
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Install verifier-only dependency
+        run: python -m pip install cryptography==46.0.7
+      - name: Signed snapshot protocol tests
+        run: python -m unittest discover -s research -p 'test_effect_target_protocol.py' -v
+      - name: External-key-pin offline verifier tests
+        run: python -m unittest discover -s research -p 'test_verify_target_observation.py' -v
+
   signed-target-observation:
     name: Native ACS / process target with signed snapshot oracle
     runs-on: ubuntu-latest
@@ -46,10 +65,6 @@ jobs:
           python -m pip install maturin==1.8.7
           python -m pip install --no-build-isolation ./sdk/python
           python -m pip install cryptography==46.0.7
-      - name: Standalone signed target-snapshot protocol tests
-        run: python -m unittest discover -s research -p 'test_effect_target_protocol.py' -v
-      - name: Offline externally pinned evidence verifier regression
-        run: python -m unittest discover -s research -p 'test_verify_target_observation.py' -v
       - name: Mandatory process-boundary effect evidence conformance
         run: python scripts/effect_grounded_target_service_gate.py
       - name: Distinct Linux UID protected-target conformance
