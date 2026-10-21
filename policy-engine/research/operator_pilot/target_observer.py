@@ -10,6 +10,7 @@ when claiming an external administrative boundary.
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -139,10 +140,10 @@ def snapshot(db_file: Path, challenge_file: Path, key_file: Path):
     key = read_private_key(key_file)
     # Existing native target's effects table stores canonical action bytes.
     # A separate read transaction observes only this target-owned database.
-    with sqlite3.connect(db_file.resolve().as_uri() + "?mode=ro", uri=True) as db:
+    with closing(sqlite3.connect(db_file.resolve().as_uri() + "?mode=ro", uri=True)) as db:
         db.execute("BEGIN")
         rows = db.execute(
-            "SELECT action_bytes FROM effects WHERE action_id=?",
+            "SELECT action_bytes FROM effects WHERE action_id=? LIMIT 2",
             (request["action_id"],),
         ).fetchall()
         if len(rows) > 1:
