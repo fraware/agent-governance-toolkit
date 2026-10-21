@@ -463,6 +463,34 @@ class NativeDualAttestationTests(unittest.TestCase):
         self.assertEqual(self.effects(), [])
 
 
+
+    def test_future_issuer_grant_rejected_at_dual_target(self):
+        """A valid issuer signature is insufficient before the signed start."""
+        frozen_now = int(self.target.clock())
+        self.target.clock = lambda: frozen_now
+        grant = self.issuer.sign(self.action)
+        grant["payload"]["issued_at"] = frozen_now + 120
+        grant["payload"]["expires_at"] = frozen_now + 180
+        grant["signature"] = self.issuer.key.sign(
+            ISSUER_DOMAIN + canonical(grant["payload"])
+        )
+        with self.assertRaises(PermissionError):
+            self.commit(grant=grant)
+        self.assertEqual(self.effects(), [])
+
+    def test_overlong_signed_issuer_grant_rejected_at_dual_target(self):
+        """The dual-signature target independently enforces the issuer TTL."""
+        frozen_now = int(self.target.clock())
+        self.target.clock = lambda: frozen_now
+        grant = self.issuer.sign(self.action)
+        grant["payload"]["expires_at"] = grant["payload"]["issued_at"] + 61
+        grant["signature"] = self.issuer.key.sign(
+            ISSUER_DOMAIN + canonical(grant["payload"])
+        )
+        with self.assertRaises(PermissionError):
+            self.commit(grant=grant)
+        self.assertEqual(self.effects(), [])
+
     def test_policy_adapter_source_changes_commitment(self):
         """A stable manifest does not hide changed custom policy source text."""
         source = inspect.getsource(CustomPolicy)
