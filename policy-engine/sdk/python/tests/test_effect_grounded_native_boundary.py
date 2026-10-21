@@ -71,6 +71,7 @@ class NativeEffectBoundaryTests(unittest.TestCase):
         allow, deny = asyncio.run(run())
         self.assertEqual(allow.verdict.decision, Decision.ALLOW)
         self.assertEqual(deny.verdict.decision, Decision.DENY)
+        self.assertNotEqual(allow.input_identity, deny.input_identity)
         self.assertEqual([x["resource"] for x in policy.seen],
                          ["/allowed/report", "/secret/report"])
         for result in (allow, deny):
