@@ -20,9 +20,14 @@ import time
 import unittest
 from uuid import uuid4
 
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+try:
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+except ImportError as exc:
+    # The SDK's ordinary test job does not install this experimental dependency.
+    # The dedicated native gate explicitly requires it and fails if it is missing.
+    raise unittest.SkipTest("research-only Ed25519 dependency unavailable") from exc
 from agent_control_specification import AgentControl, Decision, EnforcementMode, InterventionPoint, action_identity
 from test_effect_grounded_native_signed_target import (
     Action, CustomPolicy, DOMAIN as ISSUER_DOMAIN, FIELDS as ISSUER_FIELDS,
