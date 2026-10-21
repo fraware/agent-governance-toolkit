@@ -390,6 +390,52 @@ class NativeProvisionedWorkloadTests(unittest.TestCase):
         self.assertEqual(json.loads(observed.stdout), [["record-1"]])
 
 
+    def test_expired_issuer_grant_rejected_with_fresh_other_evidence(self):
+        """A valid issuer signature must never substitute for a fresh grant."""
+        credential = self.identity.issue(self.action)
+        proof = self.evaluate(credential=credential)
+        self.issuer.clock = lambda: time.time() - 120
+        grant = self.issuer.sign(self.action)
+        self.assertLess(grant["payload"]["expires_at"], int(time.time()))
+        self.assertGreater(proof["body"]["expires_at"], int(time.time()))
+        with self.assertRaises(PermissionError):
+            self.commit(credential=credential, proof=proof, grant=grant)
+        self.assertEqual(self.effects(), [])
+
+    def test_issuer_grant_valid_immediately_before_expiry(self):
+        """The issuer bound is checked at the same modeled commit instant."""
+        reference = int(time.time())
+        self.issuer.clock = lambda: reference - 10
+        grant = self.issuer.sign(self.action)
+        credential = self.identity.issue(self.action)
+        proof = self.evaluate(credential=credential)
+        expiry = grant["payload"]["expires_at"]
+        self.assertLess(expiry, proof["body"]["expires_at"])
+        self.assertLess(expiry, credential["claims"]["expires_at"])
+        self.target.clock = lambda: expiry - 1
+        self.assertEqual(
+            self.commit(credential=credential, proof=proof, grant=grant),
+            "committed",
+        )
+        self.assertEqual(self.effects(), [("record-1", "v1")])
+
+    def test_issuer_grant_expires_at_exclusive_boundary(self):
+        """At expiry, reject an issuer grant even if other attestations live."""
+        reference = int(time.time())
+        self.issuer.clock = lambda: reference - 10
+        grant = self.issuer.sign(self.action)
+        credential = self.identity.issue(self.action)
+        proof = self.evaluate(credential=credential)
+        expiry = grant["payload"]["expires_at"]
+        self.assertLess(expiry, proof["body"]["expires_at"])
+        self.assertLess(expiry, credential["claims"]["expires_at"])
+        self.target.clock = lambda: expiry
+        with self.assertRaises(PermissionError):
+            self.commit(credential=credential, proof=proof, grant=grant)
+        self.assertEqual(self.effects(), [])
+
+
+
 if __name__ == "__main__":
     if len(sys.argv) == 4 and sys.argv[1] == "--signer":
         signer_process(sys.argv[2], sys.argv[3])
