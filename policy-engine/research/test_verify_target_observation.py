@@ -137,6 +137,26 @@ class OfflineTargetObservationTests(unittest.TestCase):
         self.observation_file.write_bytes(b" " * (1024 * 1024 + 1))
         self.assertEqual(self.check()["verdict"], "undetermined")
 
+    def test_duplicate_receipt_object_keys_are_undetermined(self):
+        text = self.observation_file.read_text(encoding="utf-8")
+        original = '"state": "committed"'
+        self.assertIn(original, text)
+        text = text.replace(
+            original, '"state": "absent", "state": "committed"', 1,
+        )
+        self.observation_file.write_text(text, encoding="utf-8")
+        self.assertEqual(self.check()["verdict"], "undetermined")
+
+    def test_duplicate_action_object_keys_are_undetermined(self):
+        text = self.action_file.read_text(encoding="utf-8")
+        original = '"action_id": "action-001"'
+        self.assertIn(original, text)
+        text = text.replace(
+            original, '"action_id": "other", "action_id": "action-001"', 1,
+        )
+        self.action_file.write_text(text, encoding="utf-8")
+        self.assertEqual(self.check()["verdict"], "undetermined")
+
     def test_invalid_pin_format_undetermined(self):
         for pin in ("", "A" * 64, "0" * 63, "x" * 64):
             with self.subTest(pin=pin):
