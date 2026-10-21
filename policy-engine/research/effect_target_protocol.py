@@ -16,6 +16,9 @@ import time
 from cryptography.exceptions import InvalidSignature
 
 OBSERVATION_DOMAIN = b"ACS-EFFECT-TARGET-OBSERVATION-v1\0"
+ACTION_FIELDS = frozenset({
+    "action_id", "subject", "tenant", "resource", "operation", "value",
+})
 OBSERVATION_FIELDS = frozenset({
     "version", "kind", "nonce", "action_id", "state", "action_sha256",
     "observed_at",
@@ -30,7 +33,24 @@ def canonical(value):
     ).encode("ascii")
 
 
+def valid_action(action):
+    """Version-one target action schema; strings only for portable encoding."""
+    return (
+        type(action) is dict
+        and set(action) == ACTION_FIELDS
+        and all(type(value) is str for value in action.values())
+        and bool(action["action_id"])
+    )
+
+
+def valid_digest(digest):
+    return (type(digest) is str and len(digest) == 64
+            and all(ch in "0123456789abcdef" for ch in digest))
+
+
 def action_sha256(action):
+    if not valid_action(action):
+        raise ValueError("unsupported target action schema")
     return sha256(canonical(action)).hexdigest()
 
 
@@ -44,7 +64,7 @@ def signed_observation(private_key, *, action_id, nonce, state,
     if state not in ("committed", "absent"):
         raise ValueError("invalid target snapshot state")
     if state == "committed":
-        if type(action_digest) is not str or len(action_digest) != 64:
+        if not valid_digest(action_digest):
             raise ValueError("committed observation requires action digest")
     elif action_digest is not None:
         raise ValueError("absent snapshot must not claim an action digest")
@@ -80,8 +100,7 @@ def appraise_observation(receipt, pinned_public_key, *, action, nonce):
         payload = receipt["payload"]
         if type(payload) is not dict or set(payload) != OBSERVATION_FIELDS:
             return "undetermined"
-        if (type(action) is not dict
-                or type(action.get("action_id")) is not str
+        if (not valid_action(action)
                 or type(nonce) is not str or not nonce):
             return "undetermined"
         if (type(payload["version"]) is not int
@@ -101,7 +120,7 @@ def appraise_observation(receipt, pinned_public_key, *, action, nonce):
         digest = payload["action_sha256"]
         if (state == "absent" and digest is not None) or (
             state == "committed"
-            and (type(digest) is not str or len(digest) != 64)
+            and not valid_digest(digest)
         ):
             return "undetermined"
         signature = base64.b64decode(receipt["signature"], validate=True)
