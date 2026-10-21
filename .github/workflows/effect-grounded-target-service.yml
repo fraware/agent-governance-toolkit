@@ -6,6 +6,7 @@ on:
       - 'policy-engine/research/effect_target_protocol.py'
       - 'policy-engine/research/test_effect_target_protocol.py'
       - 'policy-engine/research/verify_target_observation.py'
+      - 'policy-engine/research/verify-target-observation.md'
       - 'policy-engine/research/test_verify_target_observation.py'
       - 'policy-engine/sdk/python/tests/test_effect_grounded_native_target_service.py'
       - 'policy-engine/sdk/python/tests/test_effect_grounded_native_signed_target.py'
