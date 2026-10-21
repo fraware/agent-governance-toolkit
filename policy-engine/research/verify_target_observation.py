@@ -27,6 +27,16 @@ MAX_INPUT_BYTES = 1024 * 1024
 RESULT_SCHEMA = "effect-target-appraisal/v1"
 
 
+def unique_object_pairs(pairs):
+    """Refuse duplicate JSON keys to avoid parser-dependent claim ambiguity."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON object key")
+        result[key] = value
+    return result
+
+
 def load_limited_json(path: Path):
     """Read a small JSON artifact; reject oversized/malformed inputs."""
     if path.stat().st_size > MAX_INPUT_BYTES:
@@ -36,6 +46,7 @@ def load_limited_json(path: Path):
         raise ValueError("JSON artifact exceeds size limit")
     return json.loads(
         data.decode("utf-8"),
+        object_pairs_hook=unique_object_pairs,
         parse_constant=lambda value: (_ for _ in ()).throw(
             ValueError("non-finite JSON number")
         ),
