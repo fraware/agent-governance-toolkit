@@ -35,6 +35,11 @@ from test_effect_grounded_native_signed_target import (
 )
 
 DECISION_DOMAIN = b"NATIVE-ACS-POLICY-DECISION-RESEARCH-v1\0"
+IDENTITY_DOMAIN = b"ACS-ACTION-BOUND-WORKLOAD-CREDENTIAL-v1\0"
+IDENTITY_FIELDS = frozenset({
+    "credential_id", "subject", "tenant", "action_sha256", "audiences",
+    "epoch", "issued_at", "expires_at",
+})
 AUDIENCE = "research-dual-target"
 POLICY_HASH = sha256(MANIFEST.encode("utf-8")).hexdigest()
 DECISION_KEYS = frozenset({
@@ -112,15 +117,19 @@ def signer_service():
 class TwoKeyTarget:
     """One IMMEDIATE transaction checks both signatures and inserts effect."""
 
-    def __init__(self, path, issuer_key, decision_key, policy_hash=POLICY_HASH):
+    def __init__(self, path, issuer_key, decision_key, policy_hash=POLICY_HASH,
+                 identity_key=None):
         self.path = Path(path)
         self.issuer_key = issuer_key
         self.decision_key = decision_key
         self.policy_hash = policy_hash
+        # If configured, a separately pinned workload-identity authority is mandatory.
+        self.identity_key = identity_key
         with sqlite3.connect(self.path) as db:
             db.execute("CREATE TABLE state(epoch INTEGER NOT NULL)")
             db.execute("INSERT INTO state VALUES(1)")
             db.execute("CREATE TABLE revoked(authorization_id TEXT PRIMARY KEY)")
+            db.execute("CREATE TABLE credential_uses(credential_id TEXT PRIMARY KEY, action_id TEXT NOT NULL)")
             db.execute(
                 "CREATE TABLE effects(action_id TEXT PRIMARY KEY, "
                 "authorization_id TEXT NOT NULL UNIQUE, "
@@ -143,7 +152,7 @@ class TwoKeyTarget:
             db.execute("INSERT OR IGNORE INTO revoked VALUES(?)", (grant_id,))
             db.execute("COMMIT")
 
-    def commit(self, action, grant, proof):
+    def commit(self, action, grant, proof, identity=None):
         with sqlite3.connect(self.path, isolation_level=None, timeout=10) as db:
             db.execute("BEGIN IMMEDIATE")
             try:
@@ -151,7 +160,10 @@ class TwoKeyTarget:
                 if type(proof) is not dict or set(proof) != {"body", "signature"}:
                     raise PermissionError("invalid attestation envelope")
                 body = proof["body"]
-                if type(body) is not dict or set(body) != DECISION_KEYS:
+                expected_fields = DECISION_KEYS | (
+                    {"credential_sha256"} if self.identity_key is not None else set()
+                )
+                if type(body) is not dict or set(body) != expected_fields:
                     raise PermissionError("invalid attestation schema")
                 try:
                     self.decision_key.verify(
@@ -172,6 +184,38 @@ class TwoKeyTarget:
                     raise PermissionError("invalid decision context")
                 if body["action"] != action.args():
                     raise PermissionError("decision/action mismatch")
+                if self.identity_key is not None:
+                    if type(identity) is not dict or set(identity) != {"claims", "signature"}:
+                        raise PermissionError("missing or malformed workload credential")
+                    claims = identity["claims"]
+                    if type(claims) is not dict or set(claims) != IDENTITY_FIELDS:
+                        raise PermissionError("invalid credential schema")
+                    try:
+                        identity_signature = decode(identity["signature"])
+                        self.identity_key.verify(
+                            identity_signature, IDENTITY_DOMAIN + canonical(claims),
+                        )
+                    except (InvalidSignature, ValueError, TypeError) as exc:
+                        raise PermissionError("invalid workload identity signature") from exc
+                    if (type(claims["credential_id"]) is not str
+                            or not claims["credential_id"]
+                            or claims["subject"] != action.subject
+                            or claims["tenant"] != action.tenant
+                            or claims["audiences"] != ["acs-policy-signer", AUDIENCE]
+                            or claims["action_sha256"] != sha256(canonical(action.args())).hexdigest()
+                            or type(claims["epoch"]) is not int
+                            or claims["epoch"] != epoch
+                            or type(claims["issued_at"]) is not int
+                            or type(claims["expires_at"]) is not int
+                            or not claims["issued_at"] <= now < claims["expires_at"]
+                            or claims["issued_at"] > now + 5
+                            or claims["expires_at"] - claims["issued_at"] > 60):
+                        raise PermissionError("invalid workload identity context")
+                    credential_digest = sha256(
+                        canonical(claims) + identity_signature,
+                    ).hexdigest()
+                    if body["credential_sha256"] != credential_digest:
+                        raise PermissionError("native decision not bound to workload credential")
                 pi = body["policy_input"]
                 if (type(pi) is not dict
                         or type(pi.get("policy_target")) is not dict
@@ -221,13 +265,18 @@ class TwoKeyTarget:
                     db.execute("COMMIT")
                     return "already_committed"
                 try:
+                    if self.identity_key is not None:
+                        db.execute(
+                            "INSERT INTO credential_uses VALUES(?,?)",
+                            (claims["credential_id"], action.action_id),
+                        )
                     db.execute(
                         "INSERT INTO effects VALUES(?,?,?,?,?,?)",
                         (action.action_id, g["authorization_id"], body["evaluation_id"],
                          operation, evidence, action.value),
                     )
                 except sqlite3.IntegrityError as exc:
-                    raise PermissionError("consumed grant or evaluation") from exc
+                    raise PermissionError("consumed grant, evaluation, or workload credential") from exc
                 db.execute("COMMIT")
                 return "committed"
             except BaseException:
