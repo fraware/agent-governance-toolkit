@@ -255,6 +255,31 @@ class TargetServiceBoundaryTests(unittest.TestCase):
             None, self.observation_key, action=self.action.args(), nonce=nonce,
         ), "undetermined")
 
+
+    def test_malformed_signature_is_undetermined(self):
+        self.assertEqual(self.rpc(self.authorization()), {"result": "committed"})
+        verdict, receipt, nonce = self.observe()
+        self.assertEqual(verdict, "established")
+        receipt["signature"] = "invalid-%%%base64"
+        self.assertEqual(
+            appraise_observation(
+                receipt, self.observation_key, action=self.action.args(),
+                nonce=nonce,
+            ), "undetermined",
+        )
+
+    def test_untrusted_observation_key_is_undetermined(self):
+        self.assertEqual(self.rpc(self.authorization()), {"result": "committed"})
+        verdict, receipt, nonce = self.observe()
+        self.assertEqual(verdict, "established")
+        untrusted_key = Ed25519PrivateKey.generate().public_key()
+        self.assertEqual(
+            appraise_observation(
+                receipt, untrusted_key, action=self.action.args(),
+                nonce=nonce,
+            ), "undetermined",
+        )
+
     def test_wrong_action_content_refutes_exact_claim(self):
         self.assertEqual(self.rpc(self.authorization()), {"result": "committed"})
         different = Action(
