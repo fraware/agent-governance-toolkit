@@ -130,6 +130,10 @@ class OfflineTargetObservationTests(unittest.TestCase):
         result = self.check()
         self.assertEqual(result["verdict"], "undetermined")
         self.assertEqual(result["reason"], "invalid_target_public_key")
+        self.key_file.write_bytes(b"x" * (1024 * 1024 + 1))
+        oversized = self.check()
+        self.assertEqual(oversized["verdict"], "undetermined")
+        self.assertEqual(oversized["reason"], "invalid_target_public_key")
 
     def test_malformed_and_oversized_observation_undetermined(self):
         self.observation_file.write_text("{ invalid", encoding="utf-8")
