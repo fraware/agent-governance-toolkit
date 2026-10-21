@@ -141,7 +141,17 @@ def main():
             finally:
                 remote_sock.close()
 
-            hello = read_json_line(local_sock)
+            try:
+                hello = read_json_line(local_sock)
+            except (RuntimeError, TimeoutError) as exc:
+                if target.poll() is None:
+                    target.terminate()
+                    target.wait(timeout=5)
+                target_error = target.stderr.read().strip() if target.stderr else ""
+                raise RuntimeError(
+                    f"restricted target bootstrap failed (exit {target.returncode}): "
+                    f"{target_error[-3000:]}"
+                ) from exc
             if (set(hello) != {"ready", "observation_public_key"}
                     or hello["ready"] is not True):
                 raise AssertionError("unexpected target bootstrap")
