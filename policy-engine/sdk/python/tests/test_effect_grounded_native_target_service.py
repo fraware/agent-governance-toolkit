@@ -19,13 +19,16 @@ import tempfile
 import unittest
 from uuid import uuid4
 
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-    Ed25519PrivateKey,
-    Ed25519PublicKey,
-)
-
-from agent_control_specification import _native  # noqa: F401
+try:
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+        Ed25519PrivateKey,
+        Ed25519PublicKey,
+    )
+except ImportError as exc:
+    # The ordinary SDK test environment omits this research-only dependency.
+    # The dedicated native workflow installs it and fails on skipped tests.
+    raise unittest.SkipTest("research-only Ed25519 dependency unavailable") from exc
 from test_effect_grounded_native_signed_target import Action, NATIVE
 from test_effect_grounded_native_dual_attestation import (
     TwoKeyTarget, decode, encode,
