@@ -137,6 +137,37 @@ class TargetOperatorPilotTests(unittest.TestCase):
         with self.assertRaises(PilotInputError):
             self.observe()
 
+    def test_rejects_exposed_key_directory_even_with_private_file_mode_0600(self):
+        self.assertEqual(self.private.stat().st_mode & 0o777, 0o600)
+        self.key_dir.chmod(0o755)
+        with self.assertRaises(PilotInputError):
+            self.observe()
+
+    def test_rejects_symlinked_key_even_if_target_is_protected(self):
+        original = self.key_dir / "actual-private.raw"
+        self.private.rename(original)
+        self.private.symlink_to(original)
+        with self.assertRaises(PilotInputError):
+            self.observe()
+
+    def test_rejects_symlinked_database_even_if_target_is_protected(self):
+        original = self.db_dir / "actual-ledger.sqlite"
+        self.db_file.rename(original)
+        self.db_file.symlink_to(original)
+        with self.assertRaises(PilotInputError):
+            self.observe()
+
+    def test_rejects_db_row_whose_action_id_disagrees_with_index(self):
+        altered = {**self.action, "action_id": "different-action-id"}
+        with sqlite3.connect(self.db_file) as db:
+            db.execute(
+                "INSERT INTO effects VALUES (?,?)",
+                (self.action["action_id"], canonical(altered)),
+            )
+        self.db_file.chmod(0o600)
+        with self.assertRaises(PilotInputError):
+            self.observe()
+
     def test_reject_bad_challenge_and_duplicate_fields(self):
         for value in (
             '{"schema":"effect-target-challenge/v1","action_id":"record-001","nonce":"short"}',
