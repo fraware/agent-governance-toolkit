@@ -137,6 +137,9 @@ def snapshot(db_file: Path, challenge_file: Path, key_file: Path):
     request = read_challenge(challenge_file)
     restricted_file(db_file)
     restricted_file(db_file.parent, require_directory=True)
+    # A 0600 key is not sufficient if another UID can rename/unlink its
+    # directory entry. Require an exclusively owned key directory at use time.
+    restricted_file(key_file.parent, require_directory=True)
     key = read_private_key(key_file)
     # Existing native target's effects table stores canonical action bytes.
     # A separate read transaction observes only this target-owned database.
