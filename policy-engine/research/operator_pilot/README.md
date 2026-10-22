@@ -38,7 +38,10 @@ python research/operator_pilot/target_observer.py init \
 
 This creates `observation-private.raw` and `observation-public.raw` once,
 both with mode `0600`, and prints the SHA-256 fingerprint of the raw public
-key. The CLI refuses key regeneration over existing files. The operator
+key. The CLI refuses key regeneration over existing files. At each observation,
+the target also rechecks that the private key's directory is owned by its
+operating UID and inaccessible to other UIDs. A protected file under an
+externally writable directory is not sufficient. The operator
 communicates the 32-byte **public** key to V and independently authenticates
 its printed 64-character lowercase fingerprint. **The observation private key
 and SQLite database never leave B's control.**
