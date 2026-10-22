@@ -63,8 +63,25 @@ jobs:
         run: python -m unittest discover -s research -p 'test_verify_target_observation.py' -v
       - name: Frozen signed receipt conformance vectors
         run: python -m unittest discover -s research -p 'test_effect_target_vectors.py' -v
-      - name: Target-operator key and signed-state pilot tests
-        run: PYTHONPATH=research python -m unittest discover -s research/operator_pilot -p 'test_target_observer.py' -v
+      - name: Mandatory target-operator security tests (16 cases, no skips)
+        env:
+          PYTHONPATH: research
+        run: |
+          python - <<'PY'
+          import unittest
+          suite = unittest.defaultTestLoader.discover(
+              start_dir="research/operator_pilot",
+              pattern="test_target_observer.py",
+          )
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          if not result.wasSuccessful() or result.testsRun != 16 or result.skipped:
+              raise SystemExit(
+                  f"TARGET_OPERATOR_GATE_FAILED: run={result.testsRun} "
+                  f"skips={len(result.skipped)} failures={len(result.failures)} "
+                  f"errors={len(result.errors)}"
+              )
+          print("TARGET_OPERATOR_16_PASSED: all 16 tests, zero skips")
+          PY
 
   signed-target-observation:
     name: Native ACS / process target with signed snapshot oracle
