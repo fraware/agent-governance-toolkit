@@ -1,0 +1,186 @@
+{
+  "schema": "effect-target-conformance-v1",
+  "purpose": "Public test vectors only, NOT a trusted target or production credential",
+  "protocol_domain_hex": "4143532d4546464543542d5441524745542d4f42534552564154494f4e2d763100",
+  "public_key_hex": "2a311896a2ed4a94ee51d93c1de4d1d29860c3535a79e6049c7f558c6d4e3ffb",
+  "public_key_sha256": "08cc14f96c33e1e3c11bbe0c2806470fc62d2aa430de1f704c8e7483cfbc30a8",
+  "canonical_action_hex": "7b22616374696f6e5f6964223a22766563746f722d303031222c226f7065726174696f6e223a227772697465222c227265736f75726365223a222f6772616e7465642f7265706f7274222c227375626a656374223a226167656e742d31222c2274656e616e74223a2274656e616e742d61222c2276616c7565223a226361665c7530306539227d",
+  "canonical_action_sha256": "ff10357eef1249a01172370b7b9d85a796da7080a162ec955f27ae191a4f47b8",
+  "vectors": [
+    {
+      "id": "exact-commit",
+      "action": {
+        "action_id": "vector-001",
+        "operation": "write",
+        "resource": "/granted/report",
+        "subject": "agent-1",
+        "tenant": "tenant-a",
+        "value": "café"
+      },
+      "nonce": "verifier-owned-nonce-2026-001",
+      "expected": "established",
+      "receipt": {
+        "payload": {
+          "action_id": "vector-001",
+          "action_sha256": "ff10357eef1249a01172370b7b9d85a796da7080a162ec955f27ae191a4f47b8",
+          "kind": "target_state_snapshot",
+          "nonce": "verifier-owned-nonce-2026-001",
+          "observed_at": 1790000000,
+          "state": "committed",
+          "version": 1
+        },
+        "signature": "iBCPJgDwKShOqOeOGtLBHqr3d4gsQlUDqAg5XV/akkILpzrUZAFAcA9w8Q/nc1jTXkD9xWX7yLbdh6j3hQyJDg=="
+      }
+    },
+    {
+      "id": "absent-snapshot",
+      "action": {
+        "action_id": "vector-001",
+        "operation": "write",
+        "resource": "/granted/report",
+        "subject": "agent-1",
+        "tenant": "tenant-a",
+        "value": "café"
+      },
+      "nonce": "verifier-owned-nonce-2026-001",
+      "expected": "refuted",
+      "receipt": {
+        "payload": {
+          "action_id": "vector-001",
+          "action_sha256": null,
+          "kind": "target_state_snapshot",
+          "nonce": "verifier-owned-nonce-2026-001",
+          "observed_at": 1790000000,
+          "state": "absent",
+          "version": 1
+        },
+        "signature": "lliXhMUFxjGDrUGQyVR0PIOcuEwQRfoOznInGwbhIlvf3NryJRBXnwu2lHfQTUah7nmJHRNYDy4/HOFNQkxtAQ=="
+      }
+    },
+    {
+      "id": "different-committed-digest",
+      "action": {
+        "action_id": "vector-001",
+        "operation": "write",
+        "resource": "/granted/report",
+        "subject": "agent-1",
+        "tenant": "tenant-a",
+        "value": "café"
+      },
+      "nonce": "verifier-owned-nonce-2026-001",
+      "expected": "refuted",
+      "receipt": {
+        "payload": {
+          "action_id": "vector-001",
+          "action_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "kind": "target_state_snapshot",
+          "nonce": "verifier-owned-nonce-2026-001",
+          "observed_at": 1790000000,
+          "state": "committed",
+          "version": 1
+        },
+        "signature": "LHUQJ+kuCVQTI9tWoeyTjBTf7ZO3p0kwkLbJwmv5fjDGKwQaGYumnKt/k8HlhuGitF6uyztPSHNWHJuE3qAICQ=="
+      }
+    },
+    {
+      "id": "tampered-signature",
+      "action": {
+        "action_id": "vector-001",
+        "operation": "write",
+        "resource": "/granted/report",
+        "subject": "agent-1",
+        "tenant": "tenant-a",
+        "value": "café"
+      },
+      "nonce": "verifier-owned-nonce-2026-001",
+      "expected": "undetermined",
+      "receipt": {
+        "payload": {
+          "action_id": "vector-001",
+          "action_sha256": "ff10357eef1249a01172370b7b9d85a796da7080a162ec955f27ae191a4f47b8",
+          "kind": "target_state_snapshot",
+          "nonce": "verifier-owned-nonce-2026-001",
+          "observed_at": 1790000000,
+          "state": "committed",
+          "version": 1
+        },
+        "signature": "ABCPJgDwKShOqOeOGtLBHqr3d4gsQlUDqAg5XV/akkILpzrUZAFAcA9w8Q/nc1jTXkD9xWX7yLbdh6j3hQyJDg=="
+      }
+    },
+    {
+      "id": "wrong-signer",
+      "action": {
+        "action_id": "vector-001",
+        "operation": "write",
+        "resource": "/granted/report",
+        "subject": "agent-1",
+        "tenant": "tenant-a",
+        "value": "café"
+      },
+      "nonce": "verifier-owned-nonce-2026-001",
+      "expected": "undetermined",
+      "receipt": {
+        "payload": {
+          "action_id": "vector-001",
+          "action_sha256": "ff10357eef1249a01172370b7b9d85a796da7080a162ec955f27ae191a4f47b8",
+          "kind": "target_state_snapshot",
+          "nonce": "verifier-owned-nonce-2026-001",
+          "observed_at": 1790000000,
+          "state": "committed",
+          "version": 1
+        },
+        "signature": "fHOEYmFMVIDfmSP9ylLxWMLiMbFod3ZGLHt6vPXm+TNouhwuGILDvwXgSI9f4kbuTMEOHOuYY0oa8fi2U4MFDA=="
+      }
+    },
+    {
+      "id": "wrong-expected-nonce",
+      "action": {
+        "action_id": "vector-001",
+        "operation": "write",
+        "resource": "/granted/report",
+        "subject": "agent-1",
+        "tenant": "tenant-a",
+        "value": "café"
+      },
+      "nonce": "verifier-owned-nonce-2026-001-other",
+      "expected": "undetermined",
+      "receipt": {
+        "payload": {
+          "action_id": "vector-001",
+          "action_sha256": "ff10357eef1249a01172370b7b9d85a796da7080a162ec955f27ae191a4f47b8",
+          "kind": "target_state_snapshot",
+          "nonce": "verifier-owned-nonce-2026-001",
+          "observed_at": 1790000000,
+          "state": "committed",
+          "version": 1
+        },
+        "signature": "iBCPJgDwKShOqOeOGtLBHqr3d4gsQlUDqAg5XV/akkILpzrUZAFAcA9w8Q/nc1jTXkD9xWX7yLbdh6j3hQyJDg=="
+      }
+    },
+    {
+      "id": "different-action-content",
+      "action": {
+        "action_id": "vector-001",
+        "operation": "write",
+        "resource": "/granted/report",
+        "subject": "agent-1",
+        "tenant": "tenant-a",
+        "value": "different"
+      },
+      "nonce": "verifier-owned-nonce-2026-001",
+      "expected": "refuted",
+      "receipt": {
+        "payload": {
+          "action_id": "vector-001",
+          "action_sha256": "ff10357eef1249a01172370b7b9d85a796da7080a162ec955f27ae191a4f47b8",
+          "kind": "target_state_snapshot",
+          "nonce": "verifier-owned-nonce-2026-001",
+          "observed_at": 1790000000,
+          "state": "committed",
+          "version": 1
+        },
+        "signature": "iBCPJgDwKShOqOeOGtLBHqr3d4gsQlUDqAg5XV/akkILpzrUZAFAcA9w8Q/nc1jTXkD9xWX7yLbdh6j3hQyJDg=="
+      }
+    }
+  ]
+}
