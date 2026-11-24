@@ -1,0 +1,155 @@
+name: acs-host-effect-exact-module
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/workflows/acs-host-effect-exact-module.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  current-upstream-validation:
+    if: github.repository == 'fraware/agent-governance-toolkit' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.number == 17)
+    name: Pinned upstream native SDK, effect regressions and mutation controls
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: upstream/policy-engine
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: microsoft/agent-governance-toolkit
+          ref: f85abe1fffc5aaeed716a94bd6654677329215b9
+          path: upstream
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: fraware/agent-governance-toolkit
+          ref: 2e29ea2323f5cd750ed5235e9d459f06fae4659e
+          path: candidate
+          persist-credentials: false
+      - name: Verify revisions and overlay only the submitted test file
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = f85abe1fffc5aaeed716a94bd6654677329215b9
+          test "$(git -C ../../candidate rev-parse HEAD)" = 2e29ea2323f5cd750ed5235e9d459f06fae4659e
+          testfile=sdk/python/tests/test_host_committed_effect_boundary.py
+          test ! -e "$testfile"
+          cp "../../candidate/policy-engine/$testfile" "$testfile"
+          test "$(git hash-object "$testfile")" = 23f116c063944482b83399aad8bd2f003e1910b0
+          git status --short
+          echo "VERIFIED_TEST_BLOB=23f116c063944482b83399aad8bd2f003e1910b0"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
+        with:
+          toolchain: stable
+      - name: Install upstream CI dependencies and compiled SDK
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 -fSLo "$RUNNER_TEMP/opa" --retry 5 --retry-all-errors --retry-delay 5 --connect-timeout 20 "https://openpolicyagent.org/downloads/v0.70.0/opa_linux_amd64_static"
+          echo "00d114b94fdb1606a48cccdfc73c9ccdc62c38721150131ae578d5ff3df5c084  $RUNNER_TEMP/opa" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/opa"
+          echo "ACS_OPA_PATH=$RUNNER_TEMP/opa" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          python -m pip install --upgrade pip==24.3.1
+          python -m pip install maturin==1.8.7 build==1.2.1 setuptools==80.9.0 pytest==9.0.3
+          python -m pip install --no-build-isolation ./sdk/python
+          python -m pip install ./generator
+          python --version
+          rustc --version
+          cargo --version
+          python -m pip freeze
+      - name: Native targeted regressions and controlled mutations
+        run: |
+          python - <<'PY'
+          import hashlib
+          import importlib.machinery
+          import inspect
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+          from xml.etree import ElementTree as ET
+          from agent_control_specification import AgentControl, _native
+
+          assert any(str(_native.__file__).endswith(s) for s in importlib.machinery.EXTENSION_SUFFIXES)
+          source = Path(inspect.getfile(AgentControl.run_tool)).resolve()
+          original = source.read_bytes()
+          assert original == Path("sdk/python/agent_control_specification/_orchestration.py").read_bytes(), source
+          print("NATIVE_EXTENSION", _native.__file__, flush=True)
+          print("ORCHESTRATION_SHA256", hashlib.sha256(original).hexdigest(), flush=True)
+
+          candidate = "sdk/python/tests/test_host_committed_effect_boundary.py"
+          upstream = "sdk/python/tests/test_run_tool_unbound_post.py"
+          def run(label, files, expected_count, expected_failure=None):
+              xml = Path(os.environ["RUNNER_TEMP"]) / f"{label}.xml"
+              xml.unlink(missing_ok=True)
+              p = subprocess.run([sys.executable, "-m", "pytest", "-v", *files, f"--junitxml={xml}"], check=False)
+              cases = ET.parse(xml).findall(".//testcase")
+              failures = [c for c in cases if c.find("failure") is not None]
+              errors = [c for c in cases if c.find("error") is not None]
+              skipped = [c for c in cases if c.find("skipped") is not None]
+              names = [(c.get("classname"), c.get("name")) for c in failures]
+              print(label, "cases", len(cases), "failures", names, "errors", len(errors), "skips", len(skipped), flush=True)
+              assert len(cases) == expected_count and not errors and not skipped, label
+              if expected_failure is None:
+                  assert p.returncode == 0 and not failures, label
+              else:
+                  assert p.returncode == 1 and failures, label
+                  matches = [c for c in failures if c.get("name") == expected_failure and "NativeToolEffectBoundaryTests" in c.get("classname", "")]
+                  assert len(matches) == 1, (label, names)
+                  assert "AssertionError" in (matches[0].find("failure").text or ""), label
+          run("candidate_baseline", [candidate], 4)
+          run("upstream_baseline", [upstream], 13)
+
+          text = original.decode("utf-8")
+          start = text.index("    async def run_tool(")
+          end = text.index("    def _binds(", start)
+          body = text[start:end]
+          pre = ("            await self.enforce(\n"
+                 "                InterventionPoint.PRE_TOOL_CALL, pre_result, enforcement_mode, approval_resolver=approval_resolver\n"
+                 "            )\n")
+          execute = "        tool_result = await _maybe_await(execute(effective_args))\n"
+          post = ("        await self.enforce(\n"
+                  "            InterventionPoint.POST_TOOL_CALL, post_result, enforcement_mode, approval_resolver=approval_resolver\n"
+                  "        )\n")
+          for fragment in (pre, execute, post):
+              assert body.count(fragment) == 1, fragment
+          # Move the original pre-enforcement block after execution at method indentation.
+          delayed = body.replace(pre, "").replace(execute, execute + "\n".join(line[4:] for line in pre.rstrip("\n").split("\n")) + "\n")
+          mutations = [
+              ("late_pre_enforcement", delayed, "test_pre_tool_deny_prevents_executor_and_commit"),
+              ("missing_post_enforcement", body.replace(post, ""), "test_post_tool_deny_does_not_rollback_prior_commit"),
+              ("duplicate_executor", body.replace(execute, execute + execute), "test_pre_and_post_allow_commit_exactly_once"),
+          ]
+          def write(data):
+              source.write_bytes(data)
+              for cache in (source.parent / "__pycache__").glob(source.stem + ".*.pyc"):
+                  cache.unlink()
+          try:
+              for label, mutant, expected in mutations:
+                  changed = (text[:start] + mutant + text[end:]).encode("utf-8")
+                  assert changed != original
+                  compile(changed, str(source), "exec")
+                  write(changed)
+                  run(label, [candidate, upstream], 17, expected)
+          finally:
+              write(original)
+          assert source.read_bytes() == original
+          run("restored_candidate", [candidate], 4)
+          print("TARGETED_MUTATION_AUDIT_PASSED", flush=True)
+          PY
+      - name: Full upstream Python SDK and generator regression suites
+        run: |
+          set -euo pipefail
+          python -m pytest -ra sdk/python --junitxml="$RUNNER_TEMP/sdk.xml"
+          python -m pytest -ra generator --junitxml="$RUNNER_TEMP/generator.xml"
+          test "$(git hash-object sdk/python/tests/test_host_committed_effect_boundary.py)" = 23f116c063944482b83399aad8bd2f003e1910b0
