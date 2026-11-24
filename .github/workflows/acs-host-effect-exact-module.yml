@@ -5,14 +5,13 @@ on:
     types: [opened, synchronize, reopened]
     paths:
       - '.github/workflows/acs-host-effect-exact-module.yml'
-  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   current-upstream-validation:
-    if: github.repository == 'fraware/agent-governance-toolkit' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.number == 17)
+    if: github.repository == 'fraware/agent-governance-toolkit' && github.event_name == 'pull_request' && github.base_ref == 'verify/acs-validation-base-20261124' && github.head_ref == 'verify/acs-validation-run-20261124' && github.event.pull_request.head.repo.full_name == github.repository
     name: Pinned upstream native SDK, effect regressions and mutation controls
     runs-on: ubuntu-latest
     timeout-minutes: 35
